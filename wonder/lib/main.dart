@@ -7,6 +7,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter/services.dart'
     show rootBundle; // Import for loading assets
 import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Required for async main
@@ -79,6 +81,8 @@ class _MyHomePageState extends State<MyHomePage> {
   // Recognized speech text
   String _recognizedText = '';
 
+  String _lastRecognizedText = "";
+
   // Raw response from OpenAI
   String _openAiResponse = '';
 
@@ -89,14 +93,79 @@ class _MyHomePageState extends State<MyHomePage> {
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
   GoogleMapController? _mapController;
+  Position? _currentPosition;
 
   // Add this as a state variable
   final TextEditingController _textController = TextEditingController();
+
+  final DraggableScrollableController _bottomSheetController =
+      DraggableScrollableController();
+
+  final FlutterTts _flutterTts = FlutterTts();
+  bool _isPlaying = false; // Track if TTS is speaking
 
   @override
   void initState() {
     super.initState();
     _initSpeech();
+    _getCurrentLocation();
+  }
+
+  // ✅ Function to get current location
+  Future<void> _getCurrentLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    // ✅ Check if location services are enabled
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      debugPrint('Location services are disabled.');
+      return;
+    }
+
+    // ✅ Check for permissions
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        debugPrint('Location permission denied');
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      debugPrint(
+          'Location permissions are permanently denied. Cannot access location.');
+      return;
+    }
+
+    _bottomSheetController.animateTo(
+      0.2, // Collapse to minimum size
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+
+    // ✅ Get current position
+    Position position = await Geolocator.getCurrentPosition();
+    setState(() {
+      _currentPosition = position;
+      _markers.add(
+        Marker(
+          markerId: const MarkerId("current_location"),
+          position: LatLng(position.latitude, position.longitude),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+          infoWindow: const InfoWindow(title: "You are here"),
+        ),
+      );
+
+      // ✅ Move camera to current location
+      _mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          LatLng(position.latitude, position.longitude),
+          14.0, // Zoom level
+        ),
+      );
+    });
   }
 
   Future<void> _initSpeech() async {
@@ -122,26 +191,112 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _onSpeechResult(SpeechRecognitionResult result) {
-    setState(() {
-      _recognizedText = result.recognizedWords;
-      _textController.text = _recognizedText;
-      _textController.selection = TextSelection.fromPosition(
-        TextPosition(
-            offset: _textController.text.length), // Keep cursor at the end
-      );
-    });
+    String newText = result.recognizedWords;
+
+    if (newText.length > _lastRecognizedText.length) {
+      String appendedText = newText.substring(_lastRecognizedText.length);
+      setState(() {
+        _recognizedText += " " + appendedText.trim(); // Append new words only
+        _textController.text = _recognizedText;
+        _textController.selection = TextSelection.fromPosition(
+          TextPosition(
+              offset: _textController.text.length), // Keep cursor at the end
+        );
+      });
+    }
+
+    _lastRecognizedText = newText; // Update last recognized text
   }
 
   Future<void> _stopListening() async {
     await _speechToText.stop();
   }
 
+  Future<void> _speakText(String text) async {
+    if (text.isEmpty) return;
+
+    await _flutterTts.setLanguage("en-US");
+    await _flutterTts.setPitch(1.0); // Normal pitch
+    await _flutterTts.setSpeechRate(0.5); // Normal speed
+
+    _flutterTts.setCompletionHandler(() {
+      setState(() {
+        _isPlaying = false; // Reset state when speaking is done
+      });
+    });
+
+    setState(() {
+      _isPlaying = true;
+    });
+
+    await _flutterTts.speak(text);
+  }
+
+  Future<void> _stopSpeaking() async {
+    await _flutterTts.stop();
+    setState(() {
+      _isPlaying = false;
+    });
+  }
+
+  void _onMarkerTapped(String name) async {
+    _bottomSheetController.animateTo(
+      0.7, // Fully expanded
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+
+    setState(() {
+      _openAiResponse = 'Loading...'; // Show loading text
+    });
+
+    try {
+      final response = await http.post(
+        Uri.parse('https://api.openai.com/v1/chat/completions'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ${Config.openAiApiKey}',
+        },
+        body: jsonEncode({
+          'model': 'gpt-3.5-turbo',
+          'messages': [
+            {
+              'role': 'user',
+              'content':
+                  'Based on this query "$_recognizedText", places were found. One of them was "$name". Give me more intresting information about it.',
+            }
+          ],
+          'temperature': 0.7,
+        }),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final content = data['choices'][0]['message']['content'] as String;
+
+        setState(() {
+          _openAiResponse = content.trim();
+        });
+      } else {
+        setState(() {
+          _openAiResponse = 'Error! Try again!';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _openAiResponse = 'Error! Try again!';
+      });
+    }
+  }
+
   /// Send recognized text to OpenAI
   Future<void> _sendToOpenAi(String userText) async {
     if (userText.isEmpty) return;
-    setState(() {
-      _openAiResponse = 'Loading...';
-    });
+
+    _bottomSheetController.animateTo(
+      0.2, // Collapse to minimum size
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
 
     try {
       final response = await http.post(
@@ -168,21 +323,10 @@ class _MyHomePageState extends State<MyHomePage> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final content = data['choices'][0]['message']['content'] as String;
-        setState(() {
-          _openAiResponse = content.trim();
-        });
 
         _parseLocations(content.trim());
-      } else {
-        setState(() {
-          _openAiResponse = 'Error: ${response.statusCode}\n${response.body}';
-        });
       }
-    } catch (e) {
-      setState(() {
-        _openAiResponse = 'Error: $e';
-      });
-    }
+    } catch (e) {}
   }
 
   /// Parse the JSON from OpenAI into _locations
@@ -220,6 +364,7 @@ class _MyHomePageState extends State<MyHomePage> {
         onTap: () {
           setState(() {
             _selectedMarkerPosition = LatLng(lat, lon);
+            _onMarkerTapped(name);
           });
         },
       );
@@ -283,7 +428,7 @@ class _MyHomePageState extends State<MyHomePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Wonder',
+          'Wonder AI',
           style: TextStyle(
             fontFamily: 'monospace',
             fontWeight: FontWeight.bold,
@@ -305,6 +450,16 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ),
 
+          Positioned(
+            top: 10, // Adjust position
+            left: 10,
+            child: FloatingActionButton(
+              onPressed: _getCurrentLocation,
+              backgroundColor: Colors.tealAccent,
+              child: const Icon(Icons.my_location, color: Colors.black),
+            ),
+          ),
+
           // Navigation Button - Only show if a marker is selected
           if (_selectedMarkerPosition != null)
             Positioned(
@@ -319,6 +474,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
           // Expandable Bottom Panel
           DraggableScrollableSheet(
+            controller: _bottomSheetController,
             initialChildSize: 0.2,
             minChildSize: 0.2,
             maxChildSize: 0.7,
@@ -370,8 +526,55 @@ class _MyHomePageState extends State<MyHomePage> {
                             onPressed: () => _sendToOpenAi(_recognizedText),
                             child: const Text('Send'),
                           ),
+                          const SizedBox(width: 16),
+                          ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                _recognizedText =
+                                    ""; // Clear the full recognized text
+                                _textController.clear(); // Clear input field
+                                _lastRecognizedText =
+                                    ""; // Reset tracking variable
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.redAccent),
+                            child: const Text('Delete'),
+                          ),
                         ],
                       ),
+                      const SizedBox(height: 16), // Add spacing
+                      Text(
+                        'Location Info:',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              color: Colors.tealAccent,
+                              fontFamily: 'monospace',
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _openAiResponse.isNotEmpty
+                            ? _openAiResponse
+                            : "Tap a red marker to learn more",
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      if (_openAiResponse.isNotEmpty &&
+                          _openAiResponse != "Loading...")
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: _isPlaying
+                                  ? _stopSpeaking
+                                  : () => _speakText(_openAiResponse),
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.cyan),
+                              icon: Icon(
+                                  _isPlaying ? Icons.stop : Icons.play_arrow),
+                              label: Text(_isPlaying ? 'Stop' : 'Listen'),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                 ),

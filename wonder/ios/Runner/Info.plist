@@ -10,6 +10,12 @@
 	<string>Your app needs to use the microphone for speech recognition.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Your app needs to recognize speech for voice commands.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We need your location to show it on the map</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>We need your location to provide better features</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Allow the app to access your location</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
