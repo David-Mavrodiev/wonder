@@ -30,9 +30,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  speech_to_text: ^7.0.0
-  http: ^0.13.5
-  google_maps_flutter: ^2.2.5
+  google_speech: ^5.3.0
+  flutter_sound_lite: ^8.5.0
+  permission_handler: ^11.1.0
+  path_provider: ^2.1.2
+  rxdart: ^0.27.3
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -54,7 +56,8 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
+  assets:
+    - assets/keys/wonder.json
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
