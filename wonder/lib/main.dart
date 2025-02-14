@@ -104,6 +104,8 @@ class _MyHomePageState extends State<MyHomePage> {
   final FlutterTts _flutterTts = FlutterTts();
   bool _isPlaying = false; // Track if TTS is speaking
 
+  Map<String, String> _locationInfoCache = {}; // Cache for location info
+
   @override
   void initState() {
     super.initState();
@@ -246,6 +248,14 @@ class _MyHomePageState extends State<MyHomePage> {
       curve: Curves.easeOut,
     );
 
+    if (_locationInfoCache.containsKey(name)) {
+      // If cached, use stored response
+      setState(() {
+        _openAiResponse = _locationInfoCache[name]!;
+      });
+      return;
+    }
+
     setState(() {
       _openAiResponse = 'Loading...'; // Show loading text
     });
@@ -275,6 +285,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
         setState(() {
           _openAiResponse = content.trim();
+          _locationInfoCache[name] = content.trim();
         });
       } else {
         setState(() {
@@ -292,11 +303,20 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _sendToOpenAi(String userText) async {
     if (userText.isEmpty) return;
 
+    _locationInfoCache.clear();
+
     _bottomSheetController.animateTo(
       0.2, // Collapse to minimum size
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
+
+    // Append user location if available
+    String locationContext = "";
+    if (_currentPosition != null) {
+      locationContext =
+          "The user's current location is (${_currentPosition!.latitude}, ${_currentPosition!.longitude}).";
+    }
 
     try {
       final response = await http.post(
@@ -311,7 +331,7 @@ class _MyHomePageState extends State<MyHomePage> {
             {
               'role': 'user',
               'content':
-                  'Based on the following context "$userText", return a list of locations in the following JSON format: '
+                  '$locationContext Based on the following context "$userText", return a list of locations in the following JSON format: '
                       '[{"name": "...", "lat": "12.34", "lon": "56.78"}]. '
                       'Only return valid JSON with no extra text.',
             }
@@ -427,12 +447,26 @@ class _MyHomePageState extends State<MyHomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Wonder AI',
-          style: TextStyle(
-            fontFamily: 'monospace',
-            fontWeight: FontWeight.bold,
-          ),
+        title: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10), // Adjust corner radius
+              child: Image.asset(
+                'assets/icon.png', // Path to your icon
+                height: 40, // Adjust size
+                width: 40, // Ensure width and height match for a square icon
+                fit: BoxFit.cover, // Ensures the image covers the space
+              ),
+            ),
+            const SizedBox(width: 8), // Spacing between icon and text
+            const Text(
+              'Wonder AI',
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
       ),
       body: Stack(
