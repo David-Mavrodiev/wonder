@@ -41,7 +41,7 @@
 
 ## Demos
 
-[Demo 1](./demo1.mp4)
+[Demo 1](https://github.com/David-Mavrodiev/wonder/blob/main/wonder/demo1.mp4)
 
-[Demo 2](./demo2.mp4)
+[Demo 2](https://github.com/David-Mavrodiev/wonder/blob/main/wonder/demo2.mp4)
 
