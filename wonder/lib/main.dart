@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_recognition_result.dart';
@@ -9,23 +10,41 @@ import 'package:flutter/services.dart'
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+//import 'package:dio/dio.dart';
+//import 'package:audioplayers/audioplayers.dart';
+import 'package:just_audio/just_audio.dart';
+import 'dart:async';
+import 'dart:typed_data';
+import 'package:provider/provider.dart';
+import 'package:wonder/quiz.dart';
+import 'loading_provider.dart';
+import 'panel_tabs.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized(); // Required for async main
   await Config.load(); // Load API keys from config.json
-  runApp(const MyApp());
+  // runApp(const MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => LoadingProvider(),
+      child: MyApp(),
+    ),
+  );
 }
 
-// Config class to load API keys from config.json
 class Config {
   static String openAiApiKey = '';
   static String googleDirectionsApiKey = '';
+  static String elevenlabsApiKey = '';
+  static String anthropicApiKey = '';
 
   static Future<void> load() async {
     final String jsonString = await rootBundle.loadString('assets/config.json');
     final Map<String, dynamic> jsonData = json.decode(jsonString);
     openAiApiKey = jsonData['openAiApiKey'];
     googleDirectionsApiKey = jsonData['googleDirectionsApiKey'];
+    elevenlabsApiKey = jsonData['elevenLabsKey'];
+    anthropicApiKey = jsonData['anthropicApiKey'];
   }
 }
 
@@ -62,6 +81,23 @@ class MyApp extends StatelessWidget {
         ),
       ),
       home: const MyHomePage(),
+      builder: (context, child) {
+        return Stack(
+          children: [
+            child!,
+            Consumer<LoadingProvider>(
+              builder: (_, loadingProvider, __) {
+                return loadingProvider.isLoading
+                    ? Container(
+                        color: Colors.black.withOpacity(0.3),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    : SizedBox.shrink();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -104,7 +140,12 @@ class _MyHomePageState extends State<MyHomePage> {
   final FlutterTts _flutterTts = FlutterTts();
   bool _isPlaying = false; // Track if TTS is speaking
 
+  // Eleven Labs
+  final AudioPlayer _audioPlayer = AudioPlayer();
+
   Map<String, String> _locationInfoCache = {}; // Cache for location info
+
+  late String _destinationName = '';
 
   @override
   void initState() {
@@ -113,19 +154,16 @@ class _MyHomePageState extends State<MyHomePage> {
     _getCurrentLocation();
   }
 
-  // ✅ Function to get current location
   Future<void> _getCurrentLocation() async {
     bool serviceEnabled;
     LocationPermission permission;
 
-    // ✅ Check if location services are enabled
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       debugPrint('Location services are disabled.');
       return;
     }
 
-    // ✅ Check for permissions
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
@@ -147,7 +185,6 @@ class _MyHomePageState extends State<MyHomePage> {
       curve: Curves.easeOut,
     );
 
-    // ✅ Get current position
     Position position = await Geolocator.getCurrentPosition();
     setState(() {
       _currentPosition = position;
@@ -160,11 +197,10 @@ class _MyHomePageState extends State<MyHomePage> {
         ),
       );
 
-      // ✅ Move camera to current location
       _mapController?.animateCamera(
         CameraUpdate.newLatLngZoom(
           LatLng(position.latitude, position.longitude),
-          14.0, // Zoom level
+          14.0,
         ),
       );
     });
@@ -214,28 +250,97 @@ class _MyHomePageState extends State<MyHomePage> {
     await _speechToText.stop();
   }
 
+  // Future<void> _speakText(String text) async {
+  //   if (text.isEmpty) return;
+
+  //   await _flutterTts.setLanguage("en-US");
+  //   await _flutterTts.setPitch(1.0); // Normal pitch
+  //   await _flutterTts.setSpeechRate(0.5); // Normal speed
+
+  //   _flutterTts.setCompletionHandler(() {
+  //     setState(() {
+  //       _isPlaying = false; // Reset state when speaking is done
+  //     });
+  //   });
+
+  //   setState(() {
+  //     _isPlaying = true;
+  //   });
+
+  //   await _flutterTts.speak(text);
+  // }
+
+  // Future<void> _stopSpeaking() async {
+  //   await _flutterTts.stop();
+  //   setState(() {
+  //     _isPlaying = false;
+  //   });
+  // }
+
   Future<void> _speakText(String text) async {
-    if (text.isEmpty) return;
+    try {
+      final url = Uri.parse(
+          'https://api.elevenlabs.io/v1/text-to-speech/JBFqnCBsd6RMkjVDRZzb/stream');
 
-    await _flutterTts.setLanguage("en-US");
-    await _flutterTts.setPitch(1.0); // Normal pitch
-    await _flutterTts.setSpeechRate(0.5); // Normal speed
+      final request = http.Request("POST", url)
+        ..headers.addAll({
+          'xi-api-key': Config.elevenlabsApiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'audio/mpeg',
+        })
+        ..body = jsonEncode({
+          'text': text,
+        });
 
-    _flutterTts.setCompletionHandler(() {
-      setState(() {
-        _isPlaying = false; // Reset state when speaking is done
-      });
-    });
+      final response = await http.Client().send(request);
 
-    setState(() {
-      _isPlaying = true;
-    });
+      if (response.statusCode == 200) {
+        final stream = response.stream;
+        final List<int> audioBytes = [];
+        final completer = Completer<void>();
 
-    await _flutterTts.speak(text);
+        stream.listen(
+          (chunk) {
+            audioBytes.addAll(chunk);
+            final audioSource = AudioSource.uri(
+              Uri.dataFromBytes(
+                Uint8List.fromList(audioBytes),
+                mimeType: 'audio/mpeg',
+              ),
+            );
+
+            _audioPlayer.setAudioSource(audioSource).then((_) {
+              _audioPlayer.play();
+              setState(() {
+                _isPlaying = true;
+              });
+            });
+          },
+          onDone: () {
+            completer.complete();
+            setState(() {
+              _isPlaying = false;
+            });
+          },
+          onError: (error) {
+            setState(() {
+              _isPlaying = false;
+            });
+            completer.completeError(error);
+          },
+        );
+
+        await completer.future;
+      } else {
+        print('Error: ${await response.stream.bytesToString()}');
+      }
+    } catch (e) {
+      print('Error: $e');
+    }
   }
 
-  Future<void> _stopSpeaking() async {
-    await _flutterTts.stop();
+  void _stopSpeaking() async {
+    await _audioPlayer.stop();
     setState(() {
       _isPlaying = false;
     });
@@ -243,65 +348,73 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _onMarkerTapped(String name) async {
     _bottomSheetController.animateTo(
-      0.7, // Fully expanded
+      0.8, // Fully expanded
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
 
-    if (_locationInfoCache.containsKey(name)) {
-      // If cached, use stored response
-      setState(() {
-        _openAiResponse = _locationInfoCache[name]!;
-      });
-      return;
-    }
-
     setState(() {
-      _openAiResponse = 'Loading...'; // Show loading text
+      _destinationName = name;
     });
 
-    try {
-      final response = await http.post(
-        Uri.parse('https://api.openai.com/v1/chat/completions'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${Config.openAiApiKey}',
-        },
-        body: jsonEncode({
-          'model': 'gpt-3.5-turbo',
-          'messages': [
-            {
-              'role': 'user',
-              'content':
-                  'Based on this query "$_recognizedText", places were found. One of them was "$name". Give me more intresting information about it.',
-            }
-          ],
-          'temperature': 0.7,
-        }),
-      );
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final content = data['choices'][0]['message']['content'] as String;
+    // if (_locationInfoCache.containsKey(name)) {
+    //   // If cached, use stored response
+    //   setState(() {
+    //     _openAiResponse = _locationInfoCache[name]!;
+    //   });
+    //   return;
+    // }
 
-        setState(() {
-          _openAiResponse = content.trim();
-          _locationInfoCache[name] = content.trim();
-        });
-      } else {
-        setState(() {
-          _openAiResponse = 'Error! Try again!';
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _openAiResponse = 'Error! Try again!';
-      });
-    }
+    // setState(() {
+    //   _openAiResponse = 'Loading...'; // Show loading text
+    // });
+
+    // try {
+    //   final response = await http.post(
+    //     Uri.parse('https://api.openai.com/v1/chat/completions'),
+    //     headers: {
+    //       'Content-Type': 'application/json',
+    //       'Authorization': 'Bearer ${Config.openAiApiKey}',
+    //     },
+    //     body: jsonEncode({
+    //       'model': 'gpt-3.5-turbo',
+    //       'messages': [
+    //         {
+    //           'role': 'user',
+    //           'content':
+    //               'Based on this query "$_recognizedText", places were found. One of them was "$name". Give me more intresting information about it.',
+    //         }
+    //       ],
+    //       'temperature': 0.7,
+    //     }),
+    //   );
+    //   if (response.statusCode == 200) {
+    //     final data = jsonDecode(response.body);
+    //     final content = data['choices'][0]['message']['content'] as String;
+
+    //     setState(() {
+    //       _openAiResponse = content.trim();
+    //       _locationInfoCache[name] = content.trim();
+    //     });
+    //   } else {
+    //     setState(() {
+    //       _openAiResponse = 'Error! Try again!';
+    //     });
+    //   }
+    // } catch (e) {
+    //   setState(() {
+    //     _openAiResponse = 'Error! Try again!';
+    //   });
+    // }
   }
 
   /// Send recognized text to OpenAI
   Future<void> _sendToOpenAi(String userText) async {
     if (userText.isEmpty) return;
+
+    final loadingProvider =
+        Provider.of<LoadingProvider>(context, listen: false);
+    loadingProvider.show();
 
     _locationInfoCache.clear();
 
@@ -343,7 +456,10 @@ class _MyHomePageState extends State<MyHomePage> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final content = data['choices'][0]['message']['content'] as String;
-
+        loadingProvider.hide();
+        setState(() {
+          _destinationName = '';
+        });
         _parseLocations(content.trim());
       }
     } catch (e) {}
@@ -493,7 +609,6 @@ class _MyHomePageState extends State<MyHomePage> {
               child: const Icon(Icons.my_location, color: Colors.black),
             ),
           ),
-
           // Navigation Button - Only show if a marker is selected
           if (_selectedMarkerPosition != null)
             Positioned(
@@ -511,7 +626,7 @@ class _MyHomePageState extends State<MyHomePage> {
             controller: _bottomSheetController,
             initialChildSize: 0.2,
             minChildSize: 0.2,
-            maxChildSize: 0.7,
+            maxChildSize: 0.8,
             builder: (context, scrollController) {
               return Container(
                 decoration: const BoxDecoration(
@@ -530,7 +645,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       TextField(
                         controller: _textController,
                         decoration: InputDecoration(
-                          hintText: 'Type or speak a location...',
+                          hintText: 'Type or speak where you want to go...',
                           filled: true,
                           fillColor: Colors.grey[900],
                           border: OutlineInputBorder(
@@ -540,6 +655,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         onChanged: (text) {
                           setState(() {
                             _recognizedText = text;
+                            _destinationName = '';
                           });
                         },
                       ),
@@ -564,11 +680,10 @@ class _MyHomePageState extends State<MyHomePage> {
                           ElevatedButton(
                             onPressed: () {
                               setState(() {
-                                _recognizedText =
-                                    ""; // Clear the full recognized text
-                                _textController.clear(); // Clear input field
-                                _lastRecognizedText =
-                                    ""; // Reset tracking variable
+                                _recognizedText = "";
+                                _textController.clear();
+                                _lastRecognizedText = "";
+                                _destinationName = "";
                               });
                             },
                             style: ElevatedButton.styleFrom(
@@ -577,37 +692,13 @@ class _MyHomePageState extends State<MyHomePage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16), // Add spacing
-                      Text(
-                        'Location Info:',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: Colors.tealAccent,
-                              fontFamily: 'monospace',
-                            ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _openAiResponse.isNotEmpty
-                            ? _openAiResponse
-                            : "Tap a red marker to learn more",
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                      if (_openAiResponse.isNotEmpty &&
-                          _openAiResponse != "Loading...")
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            ElevatedButton.icon(
-                              onPressed: _isPlaying
-                                  ? _stopSpeaking
-                                  : () => _speakText(_openAiResponse),
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.cyan),
-                              icon: Icon(
-                                  _isPlaying ? Icons.stop : Icons.play_arrow),
-                              label: Text(_isPlaying ? 'Stop' : 'Listen'),
-                            ),
-                          ],
+                      if (_destinationName.isNotEmpty)
+                        PanelTabs(
+                          elevenlabsApiKey: Config.elevenlabsApiKey,
+                          anthropicApiKey: Config.anthropicApiKey,
+                          openAiApiKey: Config.openAiApiKey,
+                          context: _recognizedText,
+                          destinationName: _destinationName,
                         ),
                     ],
                   ),
