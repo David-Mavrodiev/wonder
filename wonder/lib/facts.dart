@@ -27,108 +27,108 @@ class _FactsWidgetState extends State<Facts> {
   bool _isPlaying = false; // Track if TTS is speaking
 
   // Eleven Labs
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  // final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
   void initState() {
     super.initState();
   }
 
-  // Future<void> _speakText(String text) async {
-  //   if (text.isEmpty) return;
-
-  //   await _flutterTts.setLanguage("en-US");
-  //   await _flutterTts.setPitch(1.0); // Normal pitch
-  //   await _flutterTts.setSpeechRate(0.5); // Normal speed
-
-  //   _flutterTts.setCompletionHandler(() {
-  //     setState(() {
-  //       _isPlaying = false; // Reset state when speaking is done
-  //     });
-  //   });
-
-  //   setState(() {
-  //     _isPlaying = true;
-  //   });
-
-  //   await _flutterTts.speak(text);
-  // }
-
-  // Future<void> _stopSpeaking() async {
-  //   await _flutterTts.stop();
-  //   setState(() {
-  //     _isPlaying = false;
-  //   });
-  // }
-
   Future<void> _speakText(String text) async {
-    try {
-      final url = Uri.parse(
-          'https://api.elevenlabs.io/v1/text-to-speech/JBFqnCBsd6RMkjVDRZzb/stream');
+    if (text.isEmpty) return;
 
-      final request = http.Request("POST", url)
-        ..headers.addAll({
-          'xi-api-key': widget.elevenlabsApiKey,
-          'Content-Type': 'application/json',
-          'Accept': 'audio/mpeg',
-        })
-        ..body = jsonEncode({
-          'text': text,
-        });
+    await _flutterTts.setLanguage("en-US");
+    await _flutterTts.setPitch(1.0); // Normal pitch
+    await _flutterTts.setSpeechRate(0.5); // Normal speed
 
-      final response = await http.Client().send(request);
+    _flutterTts.setCompletionHandler(() {
+      setState(() {
+        _isPlaying = false; // Reset state when speaking is done
+      });
+    });
 
-      if (response.statusCode == 200) {
-        final stream = response.stream;
-        final List<int> audioBytes = [];
-        final completer = Completer<void>();
+    setState(() {
+      _isPlaying = true;
+    });
 
-        stream.listen(
-          (chunk) {
-            audioBytes.addAll(chunk);
-            final audioSource = AudioSource.uri(
-              Uri.dataFromBytes(
-                Uint8List.fromList(audioBytes),
-                mimeType: 'audio/mpeg',
-              ),
-            );
-
-            _audioPlayer.setAudioSource(audioSource).then((_) {
-              _audioPlayer.play();
-              setState(() {
-                _isPlaying = true;
-              });
-            });
-          },
-          onDone: () {
-            completer.complete();
-            setState(() {
-              _isPlaying = false;
-            });
-          },
-          onError: (error) {
-            setState(() {
-              _isPlaying = false;
-            });
-            completer.completeError(error);
-          },
-        );
-
-        await completer.future;
-      } else {
-        print('Error: ${await response.stream.bytesToString()}');
-      }
-    } catch (e) {
-      print('Error: $e');
-    }
+    await _flutterTts.speak(text);
   }
 
-  void _stopSpeaking() async {
-    await _audioPlayer.stop();
+  Future<void> _stopSpeaking() async {
+    await _flutterTts.stop();
     setState(() {
       _isPlaying = false;
     });
   }
+
+  // Future<void> _speakText(String text) async {
+  //   try {
+  //     final url = Uri.parse(
+  //         'https://api.elevenlabs.io/v1/text-to-speech/JBFqnCBsd6RMkjVDRZzb/stream');
+
+  //     final request = http.Request("POST", url)
+  //       ..headers.addAll({
+  //         'xi-api-key': widget.elevenlabsApiKey,
+  //         'Content-Type': 'application/json',
+  //         'Accept': 'audio/mpeg',
+  //       })
+  //       ..body = jsonEncode({
+  //         'text': text,
+  //       });
+
+  //     final response = await http.Client().send(request);
+
+  //     if (response.statusCode == 200) {
+  //       final stream = response.stream;
+  //       final List<int> audioBytes = [];
+  //       final completer = Completer<void>();
+
+  //       stream.listen(
+  //         (chunk) {
+  //           audioBytes.addAll(chunk);
+  //           final audioSource = AudioSource.uri(
+  //             Uri.dataFromBytes(
+  //               Uint8List.fromList(audioBytes),
+  //               mimeType: 'audio/mpeg',
+  //             ),
+  //           );
+
+  //           _audioPlayer.setAudioSource(audioSource).then((_) {
+  //             _audioPlayer.play();
+  //             setState(() {
+  //               _isPlaying = true;
+  //             });
+  //           });
+  //         },
+  //         onDone: () {
+  //           completer.complete();
+  //           setState(() {
+  //             _isPlaying = false;
+  //           });
+  //         },
+  //         onError: (error) {
+  //           setState(() {
+  //             _isPlaying = false;
+  //           });
+  //           completer.completeError(error);
+  //         },
+  //       );
+
+  //       await completer.future;
+  //     } else {
+  //       print('Error: ${await response.stream.bytesToString()}');
+  //     }
+  //   } catch (e) {
+  //     print('Error: $e');
+  //   }
+  // }
+
+  // void _stopSpeaking() async {
+  //   await _audioPlayer.stop();
+  //   setState(() {
+  //     _isPlaying = false;
+  //   });
+  // }
 
   @override
   Widget build(BuildContext context) {

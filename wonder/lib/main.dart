@@ -1,22 +1,14 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:flutter/services.dart'
-    show rootBundle; // Import for loading assets
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-//import 'package:dio/dio.dart';
-//import 'package:audioplayers/audioplayers.dart';
-import 'package:just_audio/just_audio.dart';
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:provider/provider.dart';
-import 'package:wonder/quiz.dart';
 import 'loading_provider.dart';
 import 'panel_tabs.dart';
 
@@ -117,15 +109,10 @@ class _MyHomePageState extends State<MyHomePage> {
   // Recognized speech text
   String _recognizedText = '';
 
-  String _lastRecognizedText = "";
+  String _lastRecognizedText = '';
 
-  // Raw response from OpenAI
-  String _openAiResponse = '';
-
-  // List of locations from OpenAI
   List<Map<String, dynamic>> _locations = [];
 
-  // Map objects
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
   GoogleMapController? _mapController;
@@ -136,14 +123,6 @@ class _MyHomePageState extends State<MyHomePage> {
 
   final DraggableScrollableController _bottomSheetController =
       DraggableScrollableController();
-
-  final FlutterTts _flutterTts = FlutterTts();
-  bool _isPlaying = false; // Track if TTS is speaking
-
-  // Eleven Labs
-  final AudioPlayer _audioPlayer = AudioPlayer();
-
-  Map<String, String> _locationInfoCache = {}; // Cache for location info
 
   late String _destinationName = '';
 
@@ -250,102 +229,6 @@ class _MyHomePageState extends State<MyHomePage> {
     await _speechToText.stop();
   }
 
-  // Future<void> _speakText(String text) async {
-  //   if (text.isEmpty) return;
-
-  //   await _flutterTts.setLanguage("en-US");
-  //   await _flutterTts.setPitch(1.0); // Normal pitch
-  //   await _flutterTts.setSpeechRate(0.5); // Normal speed
-
-  //   _flutterTts.setCompletionHandler(() {
-  //     setState(() {
-  //       _isPlaying = false; // Reset state when speaking is done
-  //     });
-  //   });
-
-  //   setState(() {
-  //     _isPlaying = true;
-  //   });
-
-  //   await _flutterTts.speak(text);
-  // }
-
-  // Future<void> _stopSpeaking() async {
-  //   await _flutterTts.stop();
-  //   setState(() {
-  //     _isPlaying = false;
-  //   });
-  // }
-
-  Future<void> _speakText(String text) async {
-    try {
-      final url = Uri.parse(
-          'https://api.elevenlabs.io/v1/text-to-speech/JBFqnCBsd6RMkjVDRZzb/stream');
-
-      final request = http.Request("POST", url)
-        ..headers.addAll({
-          'xi-api-key': Config.elevenlabsApiKey,
-          'Content-Type': 'application/json',
-          'Accept': 'audio/mpeg',
-        })
-        ..body = jsonEncode({
-          'text': text,
-        });
-
-      final response = await http.Client().send(request);
-
-      if (response.statusCode == 200) {
-        final stream = response.stream;
-        final List<int> audioBytes = [];
-        final completer = Completer<void>();
-
-        stream.listen(
-          (chunk) {
-            audioBytes.addAll(chunk);
-            final audioSource = AudioSource.uri(
-              Uri.dataFromBytes(
-                Uint8List.fromList(audioBytes),
-                mimeType: 'audio/mpeg',
-              ),
-            );
-
-            _audioPlayer.setAudioSource(audioSource).then((_) {
-              _audioPlayer.play();
-              setState(() {
-                _isPlaying = true;
-              });
-            });
-          },
-          onDone: () {
-            completer.complete();
-            setState(() {
-              _isPlaying = false;
-            });
-          },
-          onError: (error) {
-            setState(() {
-              _isPlaying = false;
-            });
-            completer.completeError(error);
-          },
-        );
-
-        await completer.future;
-      } else {
-        print('Error: ${await response.stream.bytesToString()}');
-      }
-    } catch (e) {
-      print('Error: $e');
-    }
-  }
-
-  void _stopSpeaking() async {
-    await _audioPlayer.stop();
-    setState(() {
-      _isPlaying = false;
-    });
-  }
-
   void _onMarkerTapped(String name) async {
     _bottomSheetController.animateTo(
       0.8, // Fully expanded
@@ -356,67 +239,14 @@ class _MyHomePageState extends State<MyHomePage> {
     setState(() {
       _destinationName = name;
     });
-
-    // if (_locationInfoCache.containsKey(name)) {
-    //   // If cached, use stored response
-    //   setState(() {
-    //     _openAiResponse = _locationInfoCache[name]!;
-    //   });
-    //   return;
-    // }
-
-    // setState(() {
-    //   _openAiResponse = 'Loading...'; // Show loading text
-    // });
-
-    // try {
-    //   final response = await http.post(
-    //     Uri.parse('https://api.openai.com/v1/chat/completions'),
-    //     headers: {
-    //       'Content-Type': 'application/json',
-    //       'Authorization': 'Bearer ${Config.openAiApiKey}',
-    //     },
-    //     body: jsonEncode({
-    //       'model': 'gpt-3.5-turbo',
-    //       'messages': [
-    //         {
-    //           'role': 'user',
-    //           'content':
-    //               'Based on this query "$_recognizedText", places were found. One of them was "$name". Give me more intresting information about it.',
-    //         }
-    //       ],
-    //       'temperature': 0.7,
-    //     }),
-    //   );
-    //   if (response.statusCode == 200) {
-    //     final data = jsonDecode(response.body);
-    //     final content = data['choices'][0]['message']['content'] as String;
-
-    //     setState(() {
-    //       _openAiResponse = content.trim();
-    //       _locationInfoCache[name] = content.trim();
-    //     });
-    //   } else {
-    //     setState(() {
-    //       _openAiResponse = 'Error! Try again!';
-    //     });
-    //   }
-    // } catch (e) {
-    //   setState(() {
-    //     _openAiResponse = 'Error! Try again!';
-    //   });
-    // }
   }
 
-  /// Send recognized text to OpenAI
   Future<void> _sendToOpenAi(String userText) async {
     if (userText.isEmpty) return;
 
     final loadingProvider =
         Provider.of<LoadingProvider>(context, listen: false);
     loadingProvider.show();
-
-    _locationInfoCache.clear();
 
     _bottomSheetController.animateTo(
       0.2, // Collapse to minimum size
@@ -459,13 +289,16 @@ class _MyHomePageState extends State<MyHomePage> {
         loadingProvider.hide();
         setState(() {
           _destinationName = '';
+          _selectedMarkerPosition = null;
+          _locations = [];
+          _markers = {};
+          _polylines = {};
         });
         _parseLocations(content.trim());
       }
     } catch (e) {}
   }
 
-  /// Parse the JSON from OpenAI into _locations
   void _parseLocations(String jsonStr) {
     try {
       final parsed = jsonDecode(jsonStr);
@@ -511,7 +344,6 @@ class _MyHomePageState extends State<MyHomePage> {
       _markers = markers;
     });
 
-    // Move camera to fit markers
     if (_mapController != null && markers.isNotEmpty) {
       final points = markers.map((m) => m.position).toList();
       _moveCameraToFitMarkers(points);
@@ -656,6 +488,10 @@ class _MyHomePageState extends State<MyHomePage> {
                           setState(() {
                             _recognizedText = text;
                             _destinationName = '';
+                            _selectedMarkerPosition = null;
+                            _locations = [];
+                            _markers = {};
+                            _polylines = {};
                           });
                         },
                       ),
@@ -663,13 +499,22 @@ class _MyHomePageState extends State<MyHomePage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          ElevatedButton(
+                          ElevatedButton.icon(
                             onPressed: _speechEnabled
                                 ? (isListening
                                     ? _stopListening
                                     : _startListening)
                                 : null,
-                            child: Text(isListening ? 'Stop' : 'Speak'),
+                            icon: Icon(
+                              isListening ? Icons.stop : Icons.mic,
+                              color: Colors.white,
+                            ), // Stop icon when listening, mic icon otherwise
+                            label: Text(isListening ? 'Stop' : 'Speak'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isListening
+                                  ? Colors.redAccent
+                                  : Colors.tealAccent,
+                            ),
                           ),
                           const SizedBox(width: 16),
                           ElevatedButton(
@@ -684,11 +529,14 @@ class _MyHomePageState extends State<MyHomePage> {
                                 _textController.clear();
                                 _lastRecognizedText = "";
                                 _destinationName = "";
+                                _locations = [];
+                                _markers = {};
+                                _polylines = {};
                               });
                             },
                             style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.redAccent),
-                            child: const Text('Delete'),
+                            child: const Text('Clear'),
                           ),
                         ],
                       ),

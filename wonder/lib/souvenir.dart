@@ -48,6 +48,9 @@ class _SouvenirState extends State<Souvenir> {
       );
 
       if (response.statusCode == 200) {
+        debugPrint("Dalle status ${response.statusCode}");
+        debugPrint("Dalle response ${response.body}");
+
         final data = jsonDecode(response.body);
         setState(() {
           imageUrl = data["data"][0]["url"];
