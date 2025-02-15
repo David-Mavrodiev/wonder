@@ -41,6 +41,6 @@
 
 ## Demos
 
-[Demo 1](https://github.com/David-Mavrodiev/wonder/blob/main/wonder/demo1.mp4)
+[Demo 1](https://drive.google.com/file/d/1RfeEfb-2REn9bJSFAg7HS49u7CCsXupu/view?usp=sharing)
 
-[Demo 2](https://github.com/David-Mavrodiev/wonder/blob/main/wonder/demo2.mp4)
+[Demo 2](https://drive.google.com/file/d/1Riaq9TDNllZtW8zThg3_j2OhLY5YVya7/view?usp=sharing)
