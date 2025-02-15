@@ -41,7 +41,7 @@
 
 ## Demos
 
-[Demo 1](https://github.com/YOUR_USERNAME/YOUR_REPO/raw/main/YOUR_VIDEO.mp4)
+[Demo 1](./demo1.mp4)
 
-[Demo 2](https://github.com/YOUR_USERNAME/YOUR_REPO/raw/main/YOUR_VIDEO.mp4)
+[Demo 2](./demo2.mp4)
 
