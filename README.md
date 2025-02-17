@@ -39,11 +39,7 @@
 - **ElevenLabs API** (Text-to-Speech)
 - **Google Maps API** (Navigation & Location awareness)
 
-## Demo
-<video controls width="700">
-  <source src="https://drive.google.com/file/d/1Riaq9TDNllZtW8zThg3_j2OhLY5YVya7/view?usp=sharing" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+## 🎥 Demo Video
+[![Watch the demo](https://raw.githubusercontent.com/David-Mavrodiev/wonder/main/wonder/thumbnail.png)](https://raw.githubusercontent.com/David-Mavrodiev/wonder/main/wonder/demo.mp4)
 
-## Flow
-<iframe src="https://drive.google.com/file/d/1u2AMlcBJfP97cj8zE0gxxliOxRwf4N0j/view?usp=sharing" width="800" height="600"></iframe>
+[📑 View App Flow](https://github.com/David-Mavrodiev/wonder/raw/main/wonder/flow.pdf)
