@@ -39,8 +39,11 @@
 - **ElevenLabs API** (Text-to-Speech)
 - **Google Maps API** (Navigation & Location awareness)
 
-## Demos
+## Demo
+<video controls width="700">
+  <source src="https://drive.google.com/file/d/1Riaq9TDNllZtW8zThg3_j2OhLY5YVya7/view?usp=sharing" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 
-[Demo 1](https://drive.google.com/file/d/1RfeEfb-2REn9bJSFAg7HS49u7CCsXupu/view?usp=sharing)
-
-[Demo 2](https://drive.google.com/file/d/1Riaq9TDNllZtW8zThg3_j2OhLY5YVya7/view?usp=sharing)
+## Flow
+<iframe src="https://drive.google.com/file/d/1u2AMlcBJfP97cj8zE0gxxliOxRwf4N0j/view?usp=sharing" width="800" height="600"></iframe>
